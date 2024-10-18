@@ -1,0 +1,15 @@
+with open(r"/home/nik/output.txt", "r+", encoding="utf-8") as f:
+    sett = set()
+    check_lst = ["89867653009", "89167569880", "89161111524", "89866508295", "89859971245"]
+    for el in f:
+        el = el.split(":")
+        print(el)
+        sett.add(el[-1])
+    flag = False
+    print(sett)
+    for el in check_lst:
+        if el in sett:
+            print("correct")
+            flag = True
+    if not flag:
+        print("uncorrect")
