@@ -11,15 +11,9 @@ topic_list = [line.strip() for line in open('./laba_1/categories.txt', 'r', enco
 excel_data_df = pd.read_excel('./laba_2/output.xlsx', sheet_name='Sheet1')
 columns = ['Магазин', 'Координаты и время', 'Категория', 'Бренд', 'Номер карты', 'Количество товаров', 'Цена']
 
-def delete_rows_with_lowest_uniqueness(df, qi_identifiers, max_rows_to_delete=2500):
-    # Сортировка строк по значению count (показателю уникальности)
-    df_sorted = df.sort_values(by='count')
-    
-    # Удаление первых max_rows_to_delete строк
-    removed_rows = df_sorted.head(max_rows_to_delete)
-    remaining_rows = df_sorted.iloc[max_rows_to_delete:]
-    
-    return remaining_rows, removed_rows
+def calculate_k_anonymity(df, column):
+    group_counts = df.groupby(column).size().reset_index(name='count')
+    return min(group_counts['count']), max(group_counts['count']), group_counts
 
 def mask_shop(data):
     masked_data = ''
@@ -91,29 +85,26 @@ def mask_brand(data):
     return masked_data
 
 def mask_coordinates(data):
+    # Преобразуем данные в строку
     data = str(data)
-    start_index = data.find('.') + 2
-    startstart_index = data.find('.', start_index) + 2
-    end_index = data.find(',', start_index)
-    ednend_index = data.find("'")
-    time_end = data.find("'", ednend_index)
 
-    first_cord = data[start_index:end_index]
-    second_cord = data[startstart_index:ednend_index]
+    # Извлекаем первую и вторую координаты из строки (убираем кавычки)
+    start_coords = data.find("'") + 1
+    end_coords = data.find("'", start_coords)
+    coords = data[start_coords:end_coords]  # '59.9595411,30.3145212'
+    
+    first_cord, second_cord = coords.split(',')
 
+    # Маскирование каждой из координат
     perturbed_data1 = ''.join(char if random.random() > 0.2 else random.choice("1234567890") for char in first_cord)
     perturbed_data2 = ''.join(char if random.random() > 0.2 else random.choice("1234567890") for char in second_cord)
 
-    first_cord = data[1:4] + perturbed_data1
-    second_cord = data[end_index:startstart_index] + perturbed_data2
-    cord = first_cord[:2] + second_cord[:4]
+    # Оставляем только первые две цифры целой части и четыре цифры дробной части
+    masked_first_cord = first_cord[:2]
+    masked_second_cord = second_cord[:2]
 
-    return cord
-
-def calculate_k_anonymity(df, column):
-    group_counts = df.groupby(column).size().reset_index(name='count')
-    return min(group_counts['count']), max(group_counts['count']), group_counts
-
+    # Возвращаем маскированные координаты
+    return masked_first_cord + ', ' + masked_second_cord
 
 class AnonymizationApp(QWidget):
     def __init__(self):
@@ -175,30 +166,47 @@ class AnonymizationApp(QWidget):
             pass
 
         elif action == 'Вычислить k-анонимность':
-            excel_data1_df = pd.read_excel('./laba_2/anonimized.xlsx', sheet_name='Sheet1')
-            k_anon, k_max, df_1 = calculate_k_anonymity(excel_data1_df, qi_identifiers)
-            k = k_anon
-            df_1.to_excel('./laba_2/unique_lines.xlsx', index=False)
-            print(k_anon, k_max)
+                # Чтение обезличенного датасета
+                excel_data1_df = pd.read_excel('./laba_2/anonimized.xlsx', sheet_name='Sheet1')
+                
+                # Сохранение исходного числа строк
+                initial_row_count = len(excel_data1_df)
 
-            counten = df_1['count'].tolist()
-            sort_counten = sorted(counten)
-            
-            # Удаление строк с самым низким показателем уникальности
-            remaining_rows, removed_rows = delete_rows_with_lowest_uniqueness(excel_data1_df, qi_identifiers)
-            
-            # Сохранение удаленных строк в новый файл
-            removed_rows.to_excel('./laba_2/anonimize_removed.xlsx', index=False)
-            
-            # Сохранение оставшихся строк в исходный файл
-            remaining_rows.to_excel('./laba_2/anonimized.xlsx', index=False)
+                # Вычисление k-анонимности
+                k_anon, k_max, df_1 = calculate_k_anonymity(excel_data1_df, qi_identifiers)
+                print(f"Начальная K-анонимность: min = {k_anon}, max = {k_max}")
 
-            print(f"\nПлохие значения K-анонимности (первые 5):", sort_counten[:5])
+                # Объединение обратно с исходным датасетом
+                df_1['key'] = df_1[qi_identifiers].apply(lambda x: tuple(x), axis=1)
+                excel_data1_df['key'] = excel_data1_df[qi_identifiers].apply(lambda x: tuple(x), axis=1)
+                
+                # Фильтрация строк с k-анонимностью меньше 70
+                rows_to_remove = df_1[df_1['count'] < 70]['key']
+                excel_data1_df = excel_data1_df[~excel_data1_df['key'].isin(rows_to_remove)]
 
-            unique_rows_count = len(remaining_rows.groupby(qi_identifiers))
+                # Сохранение нового числа строк
+                reduced_row_count = len(excel_data1_df)
+                
+                # Подсчёт количества удалённых строк
+                removed_rows = initial_row_count - reduced_row_count
+                print(f"Удалено {removed_rows} строк с k-анонимностью меньше 70.")
 
-            print(f"\nКоличество уникальных строк по квази-идентификаторам: {unique_rows_count}")
-            pass
+                # Сохранение уменьшенного датасета
+                excel_data1_df.drop(columns=['key'], inplace=True)  # Убираем вспомогательный столбец
+                excel_data1_df.to_excel('./laba_2/anonimized_reduced.xlsx', index=False)
+                print("Файл с удалёнными строками сохранён как 'anonimized_reduced.xlsx'.")
+
+                # Пересчет k-анонимности для нового датасета
+                k_anon_new, k_max_new, df_1_new = calculate_k_anonymity(excel_data1_df, qi_identifiers)
+                print(f"Новая K-анонимность: min = {k_anon_new}, max = {k_max_new}")
+
+                # Сортировка и вывод 5 худших значений
+                worst_k_anon = df_1_new.sort_values(by='count').head(5)
+                print(f"\nПлохие значения K-анонимности (первые 5):\n{worst_k_anon[['count']]}")
+                
+                df_1_new.to_excel('./laba_2/unique_lines.xlsx', index=False)
+
+                pass
 
 
 if __name__ == '__main__':
