@@ -15,42 +15,19 @@ def calculate_k_anonymity(df, column):
     group_counts = df.groupby(column).size().reset_index(name='count')
     return min(group_counts['count']), max(group_counts['count']), group_counts
 
-def mask_shop(data):
+def mask_brand(data):
     masked_data = ''
-    for i in range(len(shop_list)):
-        if shop_list[i] == data:
+    for i in range(len(st)):
+        if st[i] == data:
             index = i
-            if index <= 9:
-                masked_data = 'Техники'
-            elif 10 <= index <= 19:
-                masked_data = 'Косметики и мед.товаров'
-            elif index > 19:
-                masked_data = "Одежды"
-
-    return masked_data
-
-def mask_categories(data):
-    masked_data = ''
-    for i in range(len(topic_list)):
-        if topic_list[i] == data:
-            index = i
-            if index <= 14:
+            if index <= 149:
                 masked_data = 'Техника'
-            elif 15 <= index <= 29:
+            elif 150 <= index <= 299:
                 masked_data = 'Косметика и медицина'
-            elif index >= 30:
+            elif index >= 300:
                 masked_data = "Одежда,обувь и аксессуары"
 
     return masked_data
-
-def mask_price(data):
-    if int(data) < 5000:
-        price = 'меньше 5000'
-    elif int(data) >= 5000 & int(data)<50000:
-        price = 'от 5000 до 50000'
-    else:
-        price = 'больше 50000'
-    return price
 
 def mask_card(data):
     #masked_data_1 = "*" * 12
@@ -63,23 +40,16 @@ def mask_card(data):
     #masked_data = pref + masked_data_1
     return masked_data
 
-def mask_num(data):
-    if int(data) >= 50:
-        masked_data = '(50, 100)'
-    else:
-        masked_data = '(5, 50)'
-    return masked_data
-
-def mask_brand(data):
+def mask_categories(data):
     masked_data = ''
-    for i in range(len(st)):
-        if st[i] == data:
+    for i in range(len(topic_list)):
+        if topic_list[i] == data:
             index = i
-            if index <= 149:
+            if index <= 14:
                 masked_data = 'Техника'
-            elif 150 <= index <= 299:
+            elif 15 <= index <= 29:
                 masked_data = 'Косметика и медицина'
-            elif index >= 300:
+            elif index >= 30:
                 masked_data = "Одежда,обувь и аксессуары"
 
     return masked_data
@@ -105,6 +75,36 @@ def mask_coordinates(data):
 
     # Возвращаем маскированные координаты
     return masked_first_cord + ', ' + masked_second_cord
+
+def mask_num(data):
+    if int(data) >= 50:
+        masked_data = '(50, 100)'
+    else:
+        masked_data = '(5, 50)'
+    return masked_data
+
+def mask_price(data):
+    if int(data) < 5000:
+        price = 'меньше 5000'
+    elif int(data) >= 5000 & int(data)<50000:
+        price = 'от 5000 до 50000'
+    else:
+        price = 'больше 50000'
+    return price
+
+def mask_shop(data):
+    masked_data = ''
+    for i in range(len(shop_list)):
+        if shop_list[i] == data:
+            index = i
+            if index <= 9:
+                masked_data = 'Техники'
+            elif 10 <= index <= 19:
+                masked_data = 'Косметики и мед.товаров'
+            elif index > 19:
+                masked_data = "Одежды"
+
+    return masked_data
 
 class AnonymizationApp(QWidget):
     def __init__(self):
@@ -207,7 +207,6 @@ class AnonymizationApp(QWidget):
                 df_1_new.to_excel('./laba_2/unique_lines.xlsx', index=False)
 
                 pass
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
