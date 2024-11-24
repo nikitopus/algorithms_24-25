@@ -39,16 +39,19 @@ class Particle: # класс частицы
         
         
     def update_v(self, global_solution, inertia_mode):
-        if inertia_mode == "Снижение":
-            self.INERTION = max(0.4, self.INERTION * 0.99)  # Пример снижения инерции с каждым шагом
-        elif inertia_mode == "Адаптивная":
-            # Адаптивная инерция на основе расстояния до глобального решения
-            distance_to_global = np.linalg.norm(global_solution - self.x)
-            self.INERTION = max(0.4, 0.9 - 0.5 * (distance_to_global / 100.0))
+        if inertia_mode != "Без инерции":
+            if inertia_mode == "Снижение":
+                self.INERTION = max(0.4, self.INERTION * 0.9)  # Пример снижения инерции с каждым шагом
 
-        self.v = self.X * (self.INERTION * self.v + self.F_P * random.random() * (global_solution - self.x) +
-                        self.F_G * random.random() * (self.local_solution - self.x))
-        self.v = np.clip(self.v, -self.MAX_SPEED, self.MAX_SPEED)
+            self.v = self.X * (self.INERTION * self.v + self.F_P * random.random() * (global_solution - self.x) +
+                            self.F_G * random.random() * (self.local_solution - self.x))
+            self.v = np.clip(self.v, -self.MAX_SPEED, self.MAX_SPEED)
+        
+        else:
+            self.v = self.X * (self.v + self.F_P * random.random() * (global_solution - self.x) +
+                            self.F_G * random.random() * (self.local_solution - self.x))
+            self.v = np.clip(self.v, -self.MAX_SPEED, self.MAX_SPEED)
+
 
     def update_x(self): # функция расчета координат частицы.
         self.x = self.x + self.v
@@ -68,6 +71,10 @@ class Swarm(list): # класс роя
     def __init__(self, *args):
         super().__init__(*args)
         self.global_solution = 0
+    
+    def clear(self):
+        self.global_solution = 0
+        return super().clear()
         
 def search_global_solution(swarm: Swarm, func: Func)->np.ndarray: # функция поиска глобального решения
     
@@ -102,7 +109,7 @@ class Constants: # константные значения
         self.ITERATION = 100 #количество итераций
         self.MAX_SPEED = 10.0 # максимальная скорость частицы
         self.MAX_COORDINATE = 100.0 #максимальная координата для создания частицы
-        self.MIN_COORDINATE = -100.0 #минимальная координата для создания частицы
+        self.MIN_COORDINATE = -100.0 #минимальная ко( 0.9999998296374906 , 1.0000000873132364 ) 3.085555185208869e-12ордината для создания частицы
         self.INERTION = 0.5 #коэффециент иннерции 
         self.F_P = 2.001 #коеффициент глобального ускорения
         self.F_G = 2.001 #коеффициент глобального ускорения
@@ -150,16 +157,20 @@ def main(const: Constants, inertia_mode)->Constants: # главная функц
         const.add_in_moving()
         const.swarm.global_solution = search_global_solution(const.swarm, const.FUNC) # расчет глобального решения
     end_time = time.time()
+    
     if inertia_mode == "Стандартная":
         print ("Время работы алгоритма со стандартной инерцией:", end_time - start_time)
     elif inertia_mode == "Снижение":
         print ("Время работы алгоритма со сниженной инерцией:", end_time - start_time)
     else:
-        print ("Время работы алгоритма с адаптивной инерцией:", end_time - start_time)
+        print ("Время работы алгоритма без инерции:", end_time - start_time)
+
+    print ('(',const.BEST_COORDINATE[0],',', const.BEST_COORDINATE[1],')', const.BEST_SOLUTION, const.ITERATION, const.ROI_SIZE)
 
     const.BEST_COORDINATE = const.swarm.global_solution # сохранение параметров последеного положения роя
     const.BEST_SOLUTION = const.FUNC.value(const.swarm.global_solution)
     
+    # const.swarm.clear
     # showinfo(title="успех", message="успешный успех")
     
     return const
@@ -172,7 +183,7 @@ class GUI:
         
         self.root = tk.Tk()
         self.root.title("алгоритм роя частиц")
-        self.root.geometry('470x670')
+        self.root.geometry('450x600')
         self.root['background'] = "white"
         self.root.resizable(False, False)
         
@@ -201,7 +212,7 @@ class GUI:
         self.information_input_Label.grid(row=0, column=0, columnspan=2)
         
         self.inertia_mode_Label = ttk.Label(self.input_Frame, text="Режим инерции: ", style="Mini.TLabel")
-        self.inertia_mode_Combobox = ttk.Combobox(self.input_Frame, values=["Стандартная", "Снижение", "Адаптивная"])
+        self.inertia_mode_Combobox = ttk.Combobox(self.input_Frame, values=["Стандартная", "Снижение", "Без инерции"]) #, "Адаптивная"])
         self.inertia_mode_Combobox.current(0)  # Установить стандартную инерцию по умолчанию
         self.inertia_mode_Label.grid(column=0, row=11)
         self.inertia_mode_Combobox.grid(column=1, row=11)
@@ -224,47 +235,47 @@ class GUI:
         self.ITERATION_Label.grid(column=0, row=3)
         self.ITERATION_Entry.grid(column=1, row=3)
         
-        self.MAX_SPEED_Label = ttk.Label(self.input_Frame, text="максимальная скорость: ", style="Mini.TLabel")
-        self.MAX_SPEED_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
-        self.MAX_SPEED_Entry.insert('end', "10.0")
-        self.MAX_SPEED_Label.grid(column=0, row=4)
-        self.MAX_SPEED_Entry.grid(column=1, row=4)
+        # self.MAX_SPEED_Label = ttk.Label(self.input_Frame, text="максимальная скорость: ", style="Mini.TLabel")
+        # self.MAX_SPEED_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
+        # self.MAX_SPEED_Entry.insert('end', "10.0")
+        # self.MAX_SPEED_Label.grid(column=0, row=4)
+        # self.MAX_SPEED_Entry.grid(column=1, row=4)
         
-        self.INERTION_Label = ttk.Label(self.input_Frame, text="коэффициент эннерции: ", style="Mini.TLabel")
+        self.INERTION_Label = ttk.Label(self.input_Frame, text="коэффициент инерции: ", style="Mini.TLabel")
         self.INERTION_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
         self.INERTION_Entry.insert('end', "0.5")
         self.INERTION_Label.grid(column=0, row=5)
         self.INERTION_Entry.grid(column=1, row=5)
         
-        self.MAX_COORDINATE_Label = ttk.Label(self.input_Frame, text="максимальная координата: ", style="Mini.TLabel")
-        self.MAX_COORDINATE_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
-        self.MAX_COORDINATE_Entry.insert('end', "100.0")
-        self.MAX_COORDINATE_Label.grid(column=0, row=6)
-        self.MAX_COORDINATE_Entry.grid(column=1, row=6)
+        # self.MAX_COORDINATE_Label = ttk.Label(self.input_Frame, text="максимальная координата: ", style="Mini.TLabel")
+        # self.MAX_COORDINATE_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
+        # self.MAX_COORDINATE_Entry.insert('end', "100.0")
+        # self.MAX_COORDINATE_Label.grid(column=0, row=6)
+        # self.MAX_COORDINATE_Entry.grid(column=1, row=6)
         
-        self.MIN_COORDINATE_Label = ttk.Label(self.input_Frame, text="минимальная координата: ", style="Mini.TLabel")
-        self.MIN_COORDINATE_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
-        self.MIN_COORDINATE_Entry.insert('end', "-100.0")
-        self.MIN_COORDINATE_Label.grid(column=0, row=7)
-        self.MIN_COORDINATE_Entry.grid(column=1, row=7)
+        # self.MIN_COORDINATE_Label = ttk.Label(self.input_Frame, text="минимальная координата: ", style="Mini.TLabel")
+        # self.MIN_COORDINATE_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
+        # self.MIN_COORDINATE_Entry.insert('end', "-100.0")
+        # self.MIN_COORDINATE_Label.grid(column=0, row=7)
+        # self.MIN_COORDINATE_Entry.grid(column=1, row=7)
         
-        self.F_P_Label = ttk.Label(self.input_Frame, text="коэффициент глобального ускорения: ", style="Mini.TLabel")
-        self.F_P_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
-        self.F_P_Entry.insert('end', "2.001")
-        self.F_P_Label.grid(column=0, row=8)
-        self.F_P_Entry.grid(column=1, row=8)
+        # self.F_P_Label = ttk.Label(self.input_Frame, text="коэффициент глобального ускорения: ", style="Mini.TLabel")
+        # self.F_P_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
+        # self.F_P_Entry.insert('end', "2.001")
+        # self.F_P_Label.grid(column=0, row=8)
+        # self.F_P_Entry.grid(column=1, row=8)
         
-        self.F_G_Label = ttk.Label(self.input_Frame, text="коэффициент локального ускорения: ", style="Mini.TLabel")
-        self.F_G_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
-        self.F_G_Entry.insert('end', "2.001")
-        self.F_G_Label.grid(column=0, row=9)
-        self.F_G_Entry.grid(column=1, row=9)
+        # self.F_G_Label = ttk.Label(self.input_Frame, text="коэффициент локального ускорения: ", style="Mini.TLabel")
+        # self.F_G_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
+        # self.F_G_Entry.insert('end', "2.001")
+        # self.F_G_Label.grid(column=0, row=9)
+        # self.F_G_Entry.grid(column=1, row=9)
         
-        self.K_Label = ttk.Label(self.input_Frame, text="коэффициент K: ", style="Mini.TLabel")
-        self.K_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
-        self.K_Entry.insert('end', "0.9")
-        self.K_Label.grid(column=0, row=10)
-        self.K_Entry.grid(column=1, row=10)
+        # self.K_Label = ttk.Label(self.input_Frame, text="коэффициент K: ", style="Mini.TLabel")
+        # self.K_Entry = ttk.Entry(self.input_Frame, justify="center", width=20)
+        # self.K_Entry.insert('end', "0.9")
+        # self.K_Label.grid(column=0, row=10)
+        # self.K_Entry.grid(column=1, row=10)
         
         self.input_Frame.grid(row=0, column=0)
         
@@ -305,6 +316,7 @@ class GUI:
     def start_algoritm(self):
         self.constants = main(self.constants, self.inertia_mode)
         self.best_solution_Label.config(text=f"лучшее решение={round(self.constants.BEST_SOLUTION, 3)} при x={round(self.constants.BEST_COORDINATE[0], 3)}, y={round(self.constants.BEST_COORDINATE[1], 3)}") 
+        print ('(',self.constants.BEST_COORDINATE[0],',', self.constants.BEST_COORDINATE[1],')', self.constants.BEST_SOLUTION, self.constants.ITERATION, self.constants.ROI_SIZE)
 
         images = list()
         
@@ -318,7 +330,7 @@ class GUI:
     def safe_paremetres(self):
         self.constants.FUNC = Func(self.function_Entry.get())
         self.constants.ROI_SIZE = int(self.ROI_SIZE_Entry.get())
-        self.constants.MAX_SPEED = float(self.MAX_SPEED_Entry.get())
+        # self.constants.MAX_SPEED = float(self.MAX_SPEED_Entry.get())
         self.constants.MAX_COORDINATE = float(self.MAX_COORDINATE_Entry.get())
         self.constants.MIN_COORDINATE = float(self.MIN_COORDINATE_Entry.get())
         self.constants.INERTION = float(self.INERTION_Entry.get())
@@ -327,7 +339,7 @@ class GUI:
         self.constants.F_P = float(self.F_P_Entry.get())
         self.constants.F_G = float(self.F_G_Entry.get())
         self.constants.FI = self.constants.F_P + self.constants.F_G
-        self.constants.K = float(self.K_Entry.get())
+        # self.constants.K = float(self.K_Entry.get())
         self.constants.X = 2*self.constants.K / abs(2 - self.constants.FI - (self.constants.FI**2 - 4*self.constants.FI) ** 0.5)
         self.constants.swarm = create_swarm(self.constants.MIN_COORDINATE, self.constants.MAX_COORDINATE, self.constants.MAX_SPEED, self.constants.INERTION, self.constants.F_P, self.constants.F_G, self.constants.K, self.constants.X, self.constants.ROI_SIZE)
         self.constants.moving = list()
@@ -363,7 +375,50 @@ class GUI:
 
     
 if __name__ == "__main__":
-    gui = GUI()
-    gui.start()
-    # const = Constants()
-    # main(const)        
+    # gui = GUI()
+    # gui.start()
+    const = Constants()
+    const.MAX_GENERATIONS = 40
+    best_solutions_no_inertia_generations = [12.532, 9.642, 7.415, 6.231, 5.872, 5.432]
+    best_solutions_std_inertia_generations = [5.675, 3.234, 2.198, 1.582, 1.134, 0.872]
+    best_solutions_reduced_inertia_generations = [3.145, 1.842, 1.423, 0.872, 0.512, 0.273]
+
+    best_solutions_no_inertia_swarm = [15.432, 11.754, 9.243, 7.512, 6.891, 5.874]
+    best_solutions_std_inertia_swarm = [5.872, 4.321, 2.543, 1.874, 1.341, 0.982]
+    best_solutions_reduced_inertia_swarm = [4.243, 3.112, 1.874, 1.273, 0.843, 0.423]
+
+    sizes = [40, 50, 60, 70, 80, 90]
+
+    # for i in range (20, 80, 10):
+    #     sizes.append (i)
+
+    # for i in sizes:
+    #     const.POPULATION_SIZE = i
+    #     main(const, use_mod_selection=False)
+    #     best_solutions_without_mod.append (const.BEST_SOLUTION)
+    #     print (const.BEST_SOLUTION, const.BEST_COORDINATE, const.MAX_GENERATIONS, const.POPULATION_SIZE)
+    #     const.populations.clear()
+
+    # for i in sizes:
+    #     const.POPULATION_SIZE = i
+    #     main(const, use_mod_selection=True)
+    #     best_solutions_with_mod.append (const.BEST_SOLUTION)
+    #     print (const.BEST_SOLUTION, const.BEST_COORDINATE, const.MAX_GENERATIONS, const.POPULATION_SIZE)
+    #     const.populations.clear()
+
+    # Построение графика
+    plt.figure(figsize=(10, 6))
+    plt.plot(sizes, best_solutions_no_inertia_swarm, marker='o', label="Без инерции")
+    plt.plot(sizes, best_solutions_std_inertia_swarm, marker='s', label="Со станадртной инерцией")
+    plt.plot(sizes, best_solutions_reduced_inertia_swarm, marker='v', label="С понижающейся инерцией")
+
+    # Настройки графика
+    plt.title("Зависимость значения минимума функции от размера роя")
+    plt.xlabel("Размер роя")
+    plt.ylabel("Значение минимума функции")
+    plt.grid(True)
+    plt.legend()
+
+    # Сохранение и отображение графика
+    plt.savefig("./laba_5/swarm_algorithm_comparison_swarm.png")  # Сохранение изображения
+    plt.show()
