@@ -3,7 +3,7 @@ from tkinter import ttk, filedialog, simpledialog
 import networkx as nx
 import json
 import math
-import random
+import random, time
 
 class GraphApp:
     def __init__(self, root):
@@ -32,6 +32,12 @@ class GraphApp:
 
         self.length_text = tk.Entry(self.text_frame, width=30)
         self.length_text.pack()
+
+        self.label_time = tk.Label(self.text_frame, text="Время выполнения")
+        self.label_time.pack()
+
+        self.time_text = tk.Entry(self.text_frame, width=30)
+        self.time_text.pack()
 
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(side="left", anchor='nw')
@@ -70,7 +76,7 @@ class GraphApp:
         # Создаем чек-бокс
         self.checkbox = ttk.Checkbutton(
             self.button_frame,
-            text="Использовать модификацию выбора стартовой вершины",
+            text="Использовать модификацию адаптивного шага",
             variable=self.mode,
             onvalue=1,
             offvalue=0
@@ -151,8 +157,10 @@ class GraphApp:
         if len(self.nodes) < 3:
             self.update_text(self.cycle_text,"Недостаточно вершин")
             return
-
+        
+        startTime = time.perf_counter()
         cycle = self.find_cycle()
+        endTime = time.perf_counter()
 
         if cycle:
             min_hamiltonian_cycle = cycle[0]
@@ -164,6 +172,7 @@ class GraphApp:
 
             self.update_text(self.cycle_text, cycle_str)
             self.update_entry(self.length_text, f"{min_cycle_length}")
+            self.update_entry(self.time_text, f"{endTime-startTime:.4f}")
 
         else:
             self.update_text(self.cycle_text, "Гамильтонов цикл не найден")
@@ -202,8 +211,8 @@ class GraphApp:
         mid_x, mid_y = (x1 + x2) / 2, (y1 + y2) / 2
         self.canvas_cycle.create_text(mid_x, mid_y, text=f"{weight}", fill="blue", tags="cycle")
 
-    def simulated_annealing_tsp(self, initial_temp=10000, cooling_rate=0.003, num_iterations=1000):
-        # Генерируем начальное решение (можно использовать жадный алгоритм или случайный)
+    def cauchy_annealing_tsp(self, initial_temp=10000, cooling_rate=0.003, num_iterations=1000):
+        # Генерируем начальное решение
         current_solution = self.generate_initial_solution()
         current_cost = self.calculate_cycle_length(current_solution)
         
@@ -213,47 +222,83 @@ class GraphApp:
         temperature = initial_temp
         
         for i in range(num_iterations):
-            # Генерируем соседнее решение
-            neighbor_solution = self.generate_neighbor(current_solution)
+            # Генерируем соседнее решение с помощью распределения Коши
+            if self.mode == 1:
+                neighbor_solution = self.generate_adaptive_cauchy_neighbor(current_solution, temperature, initial_temp)
+            else:
+                neighbor_solution = self.generate_standart_cauchy_neighbor(current_solution)
+
             neighbor_cost = self.calculate_cycle_length(neighbor_solution)
             
             # Вычисляем разницу стоимостей
             cost_diff = neighbor_cost - current_cost
             
-            # Если решение лучше или принимаем худшее решение с некоторой вероятностью
-            if cost_diff < 0 or random.random() < math.exp(-cost_diff / temperature):
+            # Вероятность принятия решения по распределению Коши
+            if cost_diff < 0 or random.random() < self.cauchy_acceptance_prob(cost_diff, temperature):
                 current_solution = neighbor_solution
                 current_cost = neighbor_cost
                 
-                # Обновляем лучшее решение, если текущее лучше
                 if current_cost < best_cost:
                     best_solution = current_solution.copy()
                     best_cost = current_cost
             
-            # Охлаждаем температуру
-            temperature *= 1 - cooling_rate
+            # Охлаждение по схеме Коши (медленнее, чем экспоненциальное)
+            temperature = initial_temp / (1 + i * cooling_rate)
         
-        return best_solution, best_cost if best_cost != float('inf') else None
+        if best_cost != float('inf'):
+            return best_solution, best_cost
+        else:
+            return
+
+    def generate_standart_cauchy_neighbor(self, solution):
+        """Стандартный отжиг Коши: фиксированные большие шаги."""
+        neighbor = solution.copy()
+        n = len(neighbor)
+        
+        # Всегда переставляем два случайных города или инвертируем участок
+        if random.random() < 0.5:
+            i, j = random.sample(range(n), 2)
+            neighbor[i], neighbor[j] = neighbor[j], neighbor[i]
+        else:
+            start, end = sorted(random.sample(range(n), 2))
+            neighbor[start:end+1] = reversed(neighbor[start:end+1])
+        
+        return neighbor
+
+    def generate_adaptive_cauchy_neighbor(self, solution, temperature, initial_temp):
+        neighbor = solution.copy()
+        n = len(neighbor)
+        
+        # Определяем размер шага в зависимости от температуры
+        temperature_ratio = temperature / initial_temp
+        step_size = max(1, int(n * 0.1 * temperature_ratio))  # Чем выше T, тем больше шаг
+        
+        # Выбираем тип изменения в зависимости от температуры
+        if temperature_ratio > 0.5:  # Высокая температура — большие изменения
+            # Инверсия случайного участка длины step_size
+            start = random.randint(0, n - step_size)
+            neighbor[start:start+step_size] = reversed(neighbor[start:start+step_size])
+        else:  # Низкая температура — малые изменения
+            # Перестановка двух городов в пределах step_size
+            i = random.randint(0, n - 1)
+            j = (i + random.randint(1, step_size)) % n
+            neighbor[i], neighbor[j] = neighbor[j], neighbor[i]
+        
+        return neighbor
+
+    def cauchy_acceptance_prob(self, cost_diff, temperature):
+        # Функция принятия решения на основе распределения Коши
+        return 1 / (1 + (cost_diff / temperature))
 
     def generate_initial_solution(self):
-        # Можно использовать жадный алгоритм как в исходной функции или случайный маршрут
         nodes = self.nodes.copy()
         random.shuffle(nodes)
         return nodes
 
-    def generate_neighbor(self, solution):
-        # Создаем соседнее решение, например, переставляя два случайных города
-        neighbor = solution.copy()
-        i, j = random.sample(range(len(neighbor)), 2)
-        neighbor[i], neighbor[j] = neighbor[j], neighbor[i]
-        return neighbor
-
     def calculate_cycle_length(self, cycle):
-        # Проверяем, что цикл полный и можно его замкнуть
         if len(cycle) != len(self.nodes) or not self.graph.has_edge(cycle[-1], cycle[0]):
             return float('inf')
         
-        # Вычисляем длину цикла
         length = 0
         for i in range(len(cycle) - 1):
             if not self.graph.has_edge(cycle[i], cycle[i+1]):
@@ -261,13 +306,13 @@ class GraphApp:
             length += self.distance(cycle[i], cycle[i+1])
         
         length += self.distance(cycle[-1], cycle[0])
-        return length    
+        return length
 
     def find_cycle(self):
         if self.mode == 1:
-            return self.simulated_annealing_tsp()
+            return self.cauchy_annealing_tsp()
         else:
-            return self.simulated_annealing_tsp()
+            return self.cauchy_annealing_tsp()
 
     def get_edge_point(self, x1, y1, x2, y2):
         dx = x2 - x1
