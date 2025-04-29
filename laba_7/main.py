@@ -76,7 +76,7 @@ class GraphApp:
         # Создаем чек-бокс
         self.checkbox = ttk.Checkbutton(
             self.button_frame,
-            text="Использовать модификацию адаптивного шага",
+            text="Использовать модификацию Отжиг Коши",
             variable=self.mode,
             onvalue=1,
             offvalue=0
@@ -106,6 +106,7 @@ class GraphApp:
         self.edge_labels.clear()
         self.cycle_text.delete("1.0", tk.END)
         self.length_text.delete(0, "end")
+        self.time_text.delete(0, "end")
 
     def delete_edge(self, event):
         # Определяем, была ли нажата ячейка таблицы
@@ -439,7 +440,8 @@ class GraphApp:
             else:
                 end_node = closest_node
                 # Запрашиваем вес ребра у пользователя
-                weight = simpledialog.askfloat("Вес ребра", "Введите вес ребра:", parent=self.root)
+                # weight = simpledialog.askfloat("Вес ребра", "Введите вес ребра:", parent=self.root)
+                weight = 5
                 if weight is not None:  # Если пользователь ввел вес
                     if (self.start_node, end_node) not in self.edges and (end_node, self.start_node) not in self.edges:
                         self.graph.add_edge(self.start_node, end_node, weight=weight)
